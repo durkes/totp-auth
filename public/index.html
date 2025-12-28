@@ -298,7 +298,6 @@
             const clean = normalizeBase32(base32);
 
             if (!clean) throw new Error("Secret is empty.");
-            if (!/^[A-Z2-7]+$/.test(clean)) throw new Error("Secret contains invalid Base32 characters.");
 
             let bits = 0, value = 0;
             const bytes = [];
@@ -540,7 +539,6 @@
                 localStorage.removeItem(STORAGE.enc);
                 localStorage.removeItem(STORAGE.meta);
                 savePlainEntries();
-                toast("Encryption removed");
                 return;
             }
 
@@ -557,7 +555,6 @@
             vault.iterations = encPayload.iter;
 
             await persistEntries();
-            toast("Password updated");
         }
 
         function remainingInPeriod(period = 30) {
@@ -682,6 +679,15 @@
             clearModalError();
         }
 
+        function refreshAfterModalSuccess(message) {
+            closeModal();
+            updateSecurityBarUI();
+            setLockedUI(false);
+            renderList();
+            updatePreview(true);
+            toast(message);
+        }
+
         async function handleModalAction() {
             clearModalError();
 
@@ -692,13 +698,7 @@
                 try {
                     await validateCurrentPassword(pwd);
                     await persistEntries();
-                    closeModal();
-                    updateSecurityBarUI();
-                    setLockedUI(false);
-                    setEmptyState();
-                    renderList();
-                    updatePreview(true);
-                    toast("Unlocked");
+                    refreshAfterModalSuccess("Unlocked");
                 } catch (err) {
                     showModalError(err?.message || "Unlock failed.");
                 }
@@ -727,13 +727,7 @@
 
                 try {
                     await enableEncryption(p1);
-                    closeModal();
-                    updateSecurityBarUI();
-                    setLockedUI(false);
-                    setEmptyState();
-                    renderList();
-                    updatePreview(true);
-                    toast("Encryption enabled");
+                    refreshAfterModalSuccess("Encryption enabled");
                 } catch (err) {
                     showModalError(err?.message || "Failed to enable encryption.");
                 }
@@ -766,12 +760,7 @@
                     if (!newPwd) {
                         try {
                             await updatePassword("");
-                            closeModal();
-                            updateSecurityBarUI();
-                            setLockedUI(false);
-                            setEmptyState();
-                            renderList();
-                            updatePreview(true);
+                            refreshAfterModalSuccess("Encryption removed");
                         } catch (err) {
                             showModalError(err?.message || "Password update failed.");
                         }
@@ -794,12 +783,7 @@
 
                 try {
                     await updatePassword(newPwd);
-                    closeModal();
-                    updateSecurityBarUI();
-                    setLockedUI(false);
-                    setEmptyState();
-                    renderList();
-                    updatePreview(true);
+                    refreshAfterModalSuccess("Password updated");
                 } catch (err) {
                     showModalError(err?.message || "Password update failed.");
                 }
@@ -816,22 +800,8 @@
                 vault.iterations = 0;
 
                 entries = [];
-                closeModal();
-                setLockedUI(false);
-                updateSecurityBarUI();
-                setEmptyState();
-                renderList();
-                updatePreview(true);
-                toast("Reset complete");
+                refreshAfterModalSuccess("Reset complete");
             }
-        }
-
-        async function copyText(text) {
-            await navigator.clipboard.writeText(text);
-        }
-
-        function entryView() {
-            return [...entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         }
 
         function escapeHtml(s) {
@@ -878,7 +848,7 @@
 
             setText(els.countBadge, String(entries.length));
 
-            els.list.innerHTML = entryView().map((e) => `
+            els.list.innerHTML = entries.map((e) => `
         <li class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-sm" data-id="${e.id}" draggable="true">
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div class="min-w-0">
@@ -977,8 +947,7 @@
                 id: crypto.randomUUID(),
                 name: (els.nameInput.value || "").trim() || "Unnamed",
                 secret,
-                createdAt: Date.now(),
-                order: 0
+                createdAt: Date.now()
             });
 
             els.secretInput.value = "";
@@ -1004,7 +973,7 @@
                 return { ...payload, encrypted: true, meta, blob };
             }
 
-            return { ...payload, encrypted: false, entries: entryView().map(e => ({ ...e })) };
+            return { ...payload, encrypted: false, entries: entries.map(e => ({ ...e })) };
         }
 
         function exportJson() {
@@ -1116,12 +1085,11 @@
 
             updateSecurityBarUI();
             setLockedUI(false);
-            setEmptyState();
             renderList();
         }
 
         function reorderByDrag(fromId, toId) {
-            const view = entryView();
+            const view = [...entries];
             const fromIndex = view.findIndex(x => x.id === fromId);
             const toIndex = view.findIndex(x => x.id === toId);
             if (fromIndex < 0 || toIndex < 0) return;
@@ -1176,7 +1144,7 @@
             els.previewCode.addEventListener("click", async () => {
                 const val = els.previewCode.textContent.trim();
                 if (!/^\d{6}$/.test(val)) return;
-                try { await copyText(val); toast("Copied"); } catch { toast("Copy failed"); }
+                try { await navigator.clipboard.writeText(val); toast("Copied"); } catch { toast("Copy failed"); }
             });
 
             els.exportBtn.addEventListener("click", exportJson);
@@ -1226,7 +1194,7 @@
 
                 if (action === "remove" && entry) {
                     entries = entries.filter(x => x.id !== entry.id);
-                    entryView().forEach((x, i) => (entries.find(e => e.id === x.id).order = i));
+                    entries.forEach((e, i) => e.order = i);
                     try { await persistEntries(); renderList(); toast("Removed"); } catch { toast("Save failed"); }
                     return;
                 }
@@ -1244,7 +1212,7 @@
                 if (action === "copy") {
                     const code = target.textContent.trim();
                     if (!/^\d{6}$/.test(code)) return;
-                    try { await copyText(code); toast("Copied"); } catch { toast("Copy failed"); }
+                    try { await navigator.clipboard.writeText(code); toast("Copied"); } catch { toast("Copy failed"); }
                 }
             });
 
