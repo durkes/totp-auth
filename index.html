@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TOTP Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <div class="max-w-3xl mx-auto px-4 py-10">
+        <header class="mb-8">
+            <h1 class="text-3xl font-semibold tracking-tight">TOTP Generator</h1>
+            <p class="mt-2 text-slate-300">Google Authenticator style TOTP codes. Stored locally in your browser.</p>
+        </header>
+
+        <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-sm">
+            <div class="flex flex-col gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-200 mb-1" for="secretInput">Secret</label>
+                        <input id="secretInput" type="text" autocomplete="off" spellcheck="false"
+                            placeholder="JBSWY3DPEHPK3PXP"
+                            class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <p class="mt-1 text-xs text-slate-400">Spaces are allowed. Only Base32.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-200 mb-1" for="nameInput">Name</label>
+                        <input id="nameInput" type="text" autocomplete="off" placeholder="e.g. GitHub"
+                            class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <p class="mt-1 text-xs text-slate-400">Shown in your saved list.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+                    <div class="flex-1 bg-slate-950/60 border border-slate-800 rounded-2xl px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <div class="min-w-0">
+                                <div class="text-xs uppercase tracking-wide text-slate-400">Preview</div>
+                                <div id="previewCode"
+                                    class="mt-1 font-mono text-3xl tracking-wider text-slate-100 cursor-pointer select-none hover:text-white"
+                                    title="Click to copy">------</div>
+                                <div class="mt-1 text-xs text-slate-400">Click code to copy</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs uppercase tracking-wide text-slate-400">Renews in</div>
+                                <div id="previewCountdown" class="mt-1 font-mono text-2xl text-slate-200">--s</div>
+                            </div>
+                        </div>
+                        <div id="previewError" class="mt-2 text-sm text-rose-400 hidden"></div>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button id="saveBtn"
+                            class="rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition px-4 py-2 font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                            Save
+                        </button>
+                        <button id="clearBtn"
+                            class="rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 transition px-4 py-2 font-medium">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="securityBar" class="mt-6 bg-slate-900/40 border border-slate-800 rounded-2xl p-5">
+            <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                    <div class="text-lg font-semibold">Data protection</div>
+                    <div id="securityDesc" class="text-sm text-slate-300 mt-1"></div>
+                </div>
+                <div class="flex flex-wrap gap-2 justify-end">
+                    <button id="securityPrimaryBtn"
+                        class="rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition px-4 py-2 text-sm font-medium">
+                        Set password
+                    </button>
+                    <button id="lockBtn"
+                        class="rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 transition px-4 py-2 text-sm font-medium hidden">
+                        Lock
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-8">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-semibold">Saved</h2>
+                    <span id="countBadge" class="text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-200">0</span>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="exportBtn"
+                        class="rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 transition px-4 py-2 text-sm font-medium">
+                        Export JSON
+                    </button>
+                    <button id="importBtn"
+                        class="rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 transition px-4 py-2 text-sm font-medium">
+                        Import JSON
+                    </button>
+                    <input id="importFile" type="file" accept="application/json" class="hidden" />
+                </div>
+            </div>
+
+            <div id="lockedNotice"
+                class="hidden bg-slate-900/40 border border-slate-800 rounded-2xl p-6 text-slate-300">
+                <div class="flex flex-col gap-4">
+                    <div>
+                        <div class="text-lg font-semibold text-slate-100">Locked</div>
+                        <div class="mt-1 text-sm text-slate-300">Your saved entries are encrypted. Unlock to view them.
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button id="lockedUnlockBtn"
+                            class="rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition px-4 py-2 text-sm font-medium">
+                            Unlock
+                        </button>
+                        <button id="resetBtn"
+                            class="rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 transition px-4 py-2 text-sm font-medium">
+                            Reset
+                        </button>
+                    </div>
+
+                    <div class="text-xs text-slate-400">
+                        Reset permanently deletes all saved entries and removes encryption.
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-xs text-slate-400 mb-3" id="listHint">
+                Drag the handle to reorder. Click a code to copy.
+            </div>
+
+            <div id="emptyState" class="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 text-slate-300">
+                No saved entries yet. Add a secret above and hit Save.
+            </div>
+
+            <ul id="list" class="mt-4 space-y-3"></ul>
+        </section>
+
+        <footer class="mt-10 text-xs text-slate-500">
+            Stored in Local Storage. Export your JSON if you need backups.
+        </footer>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 hidden">
+        <div class="rounded-xl bg-slate-900 border border-slate-700 px-4 py-2 text-sm text-slate-100 shadow-lg"></div>
+    </div>
+
+    <div id="modalRoot" class="fixed inset-0 hidden z-50">
+        <div id="modalBackdrop" class="absolute inset-0 bg-black/60"></div>
+
+        <div class="absolute inset-0 flex items-center justify-center px-4">
+            <div class="w-full max-w-lg rounded-2xl bg-slate-950 border border-slate-800 shadow-xl">
+                <div class="p-5 border-b border-slate-800 flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <div id="modalTitle" class="text-lg font-semibold"></div>
+                        <div id="modalSubtitle" class="mt-1 text-sm text-slate-300"></div>
+                    </div>
+                    <button id="modalCloseBtn"
+                        class="text-slate-400 hover:text-slate-200 text-xl leading-none px-2">×</button>
+                </div>
+
+                <div class="p-5">
+                    <div id="modalError" class="mb-4 text-sm text-rose-400 hidden"></div>
+
+                    <div id="modalUnlock" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200 mb-1"
+                                for="modalUnlockPassword">Password</label>
+                            <input id="modalUnlockPassword" type="password" autocomplete="current-password"
+                                class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                    </div>
+
+                    <div id="modalSetPasswordStep1" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200 mb-1" for="modalSetPassword1">Set
+                                password</label>
+                            <input id="modalSetPassword1" type="password" autocomplete="new-password"
+                                class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <div class="mt-2 text-xs text-slate-400">You will be asked to type it again to confirm.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="modalSetPasswordStep2" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200 mb-1" for="modalSetPassword2">Confirm
+                                password</label>
+                            <input id="modalSetPassword2" type="password" autocomplete="new-password"
+                                class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                    </div>
+
+                    <div id="modalChangePasswordStep1" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200 mb-1"
+                                for="modalExistingPassword">Current password</label>
+                            <input id="modalExistingPassword" type="password" autocomplete="current-password"
+                                class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                    </div>
+
+                    <div id="modalChangePasswordStep2" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200 mb-1" for="modalNewPassword1">New
+                                password</label>
+                            <input id="modalNewPassword1" type="password" autocomplete="new-password"
+                                class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <div class="mt-2 text-xs text-slate-400">Leave empty to remove encryption.</div>
+                        </div>
+                    </div>
+
+                    <div id="modalChangePasswordStep3" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200 mb-1" for="modalNewPassword2">Confirm
+                                new password</label>
+                            <input id="modalNewPassword2" type="password" autocomplete="new-password"
+                                class="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                    </div>
+
+                    <div id="modalResetConfirm" class="hidden space-y-3">
+                        <div class="text-sm text-slate-300">
+                            This will permanently delete all saved entries and remove encryption.
+                        </div>
+                        <div class="text-sm text-slate-300">
+                            Are you sure you want to reset?
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-5 border-t border-slate-800 flex flex-col sm:flex-row gap-3 sm:justify-end">
+                    <button id="modalCancelBtn"
+                        class="rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 transition px-4 py-2 text-sm font-medium">
+                        Cancel
+                    </button>
+                    <button id="modalActionBtn"
+                        class="rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition px-4 py-2 text-sm font-medium">
+                        Continue
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE = { plain: "totp_entries_v1", enc: "totp_entries_v2_encrypted", meta: "totp_entries_v2_meta" };
+        const $ = (id) => document.getElementById(id);
+        const els = {};
+        [
+            "secretInput", "nameInput", "previewCode", "previewCountdown", "previewError", "saveBtn", "clearBtn",
+            "list", "emptyState", "exportBtn", "importBtn", "importFile", "countBadge", "toast",
+            "securityDesc", "securityPrimaryBtn", "lockBtn",
+            "lockedNotice", "lockedUnlockBtn", "resetBtn", "listHint",
+            "modalRoot", "modalBackdrop", "modalCloseBtn", "modalCancelBtn", "modalActionBtn",
+            "modalTitle", "modalSubtitle", "modalError",
+            "modalUnlock", "modalUnlockPassword",
+            "modalSetPasswordStep1", "modalSetPasswordStep2", "modalSetPassword1", "modalSetPassword2",
+            "modalChangePasswordStep1", "modalChangePasswordStep2", "modalChangePasswordStep3",
+            "modalExistingPassword", "modalNewPassword1", "modalNewPassword2",
+            "modalResetConfirm"
+        ].forEach((k) => els[k] = $(k));
+
+        const modalBodies = [
+            "modalUnlock", "modalSetPasswordStep1", "modalSetPasswordStep2",
+            "modalChangePasswordStep1", "modalChangePasswordStep2", "modalChangePasswordStep3",
+            "modalResetConfirm"
+        ];
+
+        const vault = { mode: "plain", unlocked: true, key: null, salt: null, iterations: 0 };
+        const modalState = { kind: null, step: 1, temp: {} };
+        let entries = [];
+        let previewTimer = 0;
+        let lastSecond = -1;
+        let lastWindow = -1;
+
+        const show = (el, on) => el.classList.toggle("hidden", !on);
+        const setText = (el, t) => el.textContent = t;
+
+        function toast(msg) {
+            els.toast.querySelector("div").textContent = msg;
+            show(els.toast, true);
+            clearTimeout(toast._t);
+            toast._t = setTimeout(() => show(els.toast, false), 1600);
+        }
+
+        function normalizeBase32(input) {
+            return (input || "").toUpperCase().replace(/\s+/g, "").replace(/=+$/g, "");
+        }
+
+        function base32ToBytes(base32) {
+            const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+            const clean = normalizeBase32(base32);
+
+            if (!clean) throw new Error("Secret is empty.");
+            if (!/^[A-Z2-7]+$/.test(clean)) throw new Error("Secret contains invalid Base32 characters.");
+
+            let bits = 0, value = 0;
+            const bytes = [];
+
+            for (let i = 0; i < clean.length; i++) {
+                const idx = alphabet.indexOf(clean[i]);
+                if (idx < 0) throw new Error("Secret contains invalid Base32 characters.");
+
+                value = (value << 5) | idx;
+                bits += 5;
+
+                if (bits >= 8) {
+                    bytes.push((value >>> (bits - 8)) & 0xff);
+                    bits -= 8;
+                }
+            }
+
+            return new Uint8Array(bytes);
+        }
+
+        async function hmacSha1(keyBytes, msgBytes) {
+            const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+            return new Uint8Array(await crypto.subtle.sign("HMAC", key, msgBytes));
+        }
+
+        function intTo8ByteArray(num) {
+            const arr = new Uint8Array(8);
+            let n = BigInt(num);
+            for (let i = 7; i >= 0; i--) {
+                arr[i] = Number(n & 0xffn);
+                n >>= 8n;
+            }
+            return arr;
+        }
+
+        async function generateTotp(secretBase32, step = 30, digits = 6) {
+            const keyBytes = base32ToBytes(secretBase32);
+            const counter = Math.floor((Date.now() / 1000) / step);
+            const mac = await hmacSha1(keyBytes, intTo8ByteArray(counter));
+
+            const offset = mac[mac.length - 1] & 0x0f;
+            const binCode =
+                ((mac[offset] & 0x7f) << 24) |
+                ((mac[offset + 1] & 0xff) << 16) |
+                ((mac[offset + 2] & 0xff) << 8) |
+                (mac[offset + 3] & 0xff);
+
+            return (binCode % (10 ** digits)).toString().padStart(digits, "0");
+        }
+
+        const enc = new TextEncoder();
+        const dec = new TextDecoder();
+
+        function bytesToB64(bytes) {
+            let bin = "";
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            return btoa(bin);
+        }
+
+        function b64ToBytes(b64) {
+            const bin = atob(b64);
+            const out = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+
+        function randomBytes(n) {
+            const b = new Uint8Array(n);
+            crypto.getRandomValues(b);
+            return b;
+        }
+
+        async function deriveAesKeyFromPassword(password, saltBytes, iterations) {
+            const baseKey = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+            return crypto.subtle.deriveKey(
+                { name: "PBKDF2", salt: saltBytes, iterations, hash: "SHA-256" },
+                baseKey,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encryptJsonWithPassword(obj, password, { iterations = 310000, salt = randomBytes(16) } = {}) {
+            const iv = randomBytes(12);
+            const key = await deriveAesKeyFromPassword(password, salt, iterations);
+            const plaintext = enc.encode(JSON.stringify(obj));
+            const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
+            return { v: 2, iter: iterations, salt: bytesToB64(salt), iv: bytesToB64(iv), ct: bytesToB64(ciphertext) };
+        }
+
+        async function decryptJsonWithPassword(payload, password) {
+            if (!payload || payload.v !== 2 || !payload.ct || !payload.iv || !payload.salt || !payload.iter) {
+                throw new Error("Encrypted data format not recognized.");
+            }
+
+            const salt = b64ToBytes(payload.salt);
+            const iv = b64ToBytes(payload.iv);
+            const ct = b64ToBytes(payload.ct);
+            const key = await deriveAesKeyFromPassword(password, salt, payload.iter);
+
+            let plaintext;
+            try {
+                plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct));
+            } catch {
+                throw new Error("Incorrect password.");
+            }
+
+            return { obj: JSON.parse(dec.decode(plaintext)), salt, iterations: payload.iter, key };
+        }
+
+        function getJson(key) {
+            try {
+                const raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function setJson(key, val) {
+            localStorage.setItem(key, JSON.stringify(val));
+        }
+
+        function normalizeEntry(x) {
+            return {
+                id: String(x.id || crypto.randomUUID()),
+                name: String(x.name || "Unnamed"),
+                secret: normalizeBase32(String(x.secret || "")),
+                createdAt: Number.isFinite(x.createdAt) ? x.createdAt : Date.now(),
+                order: Number.isFinite(x.order) ? x.order : 0
+            };
+        }
+
+        function normalizeEntriesArray(arr) {
+            const list = (arr || [])
+                .filter(x => x && typeof x === "object")
+                .map(normalizeEntry)
+                .filter(x => x.secret)
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+            if (!list.length) throw new Error("No valid entries found in JSON.");
+
+            const seen = new Set();
+            return list.map(e => {
+                let id = e.id;
+                while (seen.has(id)) id = crypto.randomUUID();
+                seen.add(id);
+                return { ...e, id };
+            });
+        }
+
+        function loadPlainEntries() {
+            const parsed = getJson(STORAGE.plain);
+            if (!Array.isArray(parsed)) return [];
+            return parsed
+                .filter(x => x && typeof x === "object")
+                .map(normalizeEntry)
+                .filter(x => x.secret)
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        }
+
+        function savePlainEntries() {
+            setJson(STORAGE.plain, entries);
+        }
+
+        function hasEncryptedData() {
+            const meta = getJson(STORAGE.meta);
+            const blob = getJson(STORAGE.enc);
+            return !!(meta && meta.protected && blob && blob.ct && blob.iv);
+        }
+
+        async function saveEncryptedEntriesWithKey() {
+            if (!vault.key) throw new Error("Missing encryption key.");
+
+            setJson(STORAGE.meta, { v: 2, protected: true, kdf: "PBKDF2-SHA256", iter: vault.iterations, salt: bytesToB64(vault.salt) });
+
+            const iv = randomBytes(12);
+            const plaintext = enc.encode(JSON.stringify(entries));
+            const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, vault.key, plaintext));
+            setJson(STORAGE.enc, { v: 2, alg: "AES-GCM", iv: bytesToB64(iv), ct: bytesToB64(ciphertext) });
+        }
+
+        async function persistEntries() {
+            if (vault.mode === "plain") return savePlainEntries();
+            if (!vault.unlocked) return;
+            await saveEncryptedEntriesWithKey();
+        }
+
+        async function validateCurrentPassword(password) {
+            const meta = getJson(STORAGE.meta);
+            const blob = getJson(STORAGE.enc);
+            if (!meta || !blob) throw new Error("Encrypted data missing.");
+
+            const payload = { v: 2, ct: blob.ct, iv: blob.iv, salt: meta.salt, iter: meta.iter };
+            const res = await decryptJsonWithPassword(payload, password);
+            if (!Array.isArray(res.obj)) throw new Error("Decrypted data is invalid.");
+
+            vault.mode = "encrypted";
+            vault.unlocked = true;
+            vault.key = res.key;
+            vault.salt = res.salt;
+            vault.iterations = res.iterations;
+
+            entries = normalizeEntriesArray(res.obj);
+            entries.forEach((e, i) => e.order = i);
+        }
+
+        async function enableEncryption(password) {
+            if (!password) throw new Error("Password cannot be empty.");
+
+            const encPayload = await encryptJsonWithPassword(entries, password, { iterations: 310000 });
+            setJson(STORAGE.meta, { v: 2, protected: true, kdf: "PBKDF2-SHA256", iter: encPayload.iter, salt: encPayload.salt });
+            setJson(STORAGE.enc, { v: 2, alg: "AES-GCM", iv: encPayload.iv, ct: encPayload.ct });
+            localStorage.removeItem(STORAGE.plain);
+
+            const saltBytes = b64ToBytes(encPayload.salt);
+            vault.mode = "encrypted";
+            vault.unlocked = true;
+            vault.key = await deriveAesKeyFromPassword(password, saltBytes, encPayload.iter);
+            vault.salt = saltBytes;
+            vault.iterations = encPayload.iter;
+
+            await persistEntries();
+        }
+
+        async function updatePassword(newPassword) {
+            if (vault.mode !== "encrypted" || !vault.unlocked || !vault.key) {
+                throw new Error("Vault must be unlocked first.");
+            }
+
+            if (!newPassword) {
+                vault.mode = "plain";
+                vault.unlocked = true;
+                vault.key = null;
+                vault.salt = null;
+                vault.iterations = 0;
+
+                localStorage.removeItem(STORAGE.enc);
+                localStorage.removeItem(STORAGE.meta);
+                savePlainEntries();
+                toast("Encryption removed");
+                return;
+            }
+
+            const encPayload = await encryptJsonWithPassword(entries, newPassword, { iterations: 310000 });
+            setJson(STORAGE.meta, { v: 2, protected: true, kdf: "PBKDF2-SHA256", iter: encPayload.iter, salt: encPayload.salt });
+            setJson(STORAGE.enc, { v: 2, alg: "AES-GCM", iv: encPayload.iv, ct: encPayload.ct });
+            localStorage.removeItem(STORAGE.plain);
+
+            const saltBytes = b64ToBytes(encPayload.salt);
+            vault.mode = "encrypted";
+            vault.unlocked = true;
+            vault.key = await deriveAesKeyFromPassword(newPassword, saltBytes, encPayload.iter);
+            vault.salt = saltBytes;
+            vault.iterations = encPayload.iter;
+
+            await persistEntries();
+            toast("Password updated");
+        }
+
+        function remainingInPeriod(period = 30) {
+            const s = Math.floor(Date.now() / 1000);
+            return period - (s % period);
+        }
+
+        function setEmptyState() {
+            const has = vault.unlocked && entries.length > 0;
+            show(els.emptyState, vault.unlocked && !has);
+            setText(els.countBadge, vault.unlocked ? String(entries.length) : "0");
+        }
+
+        function setLockedUI(isLocked) {
+            show(els.lockedNotice, isLocked);
+            show(els.listHint, !isLocked);
+            show(els.countBadge, !isLocked);
+            els.list.innerHTML = "";
+            show(els.emptyState, false);
+            els.saveBtn.disabled = isLocked;
+            if (!isLocked) setText(els.countBadge, String(entries.length));
+        }
+
+        function updateSecurityBarUI() {
+            if (vault.mode === "encrypted") {
+                if (!vault.unlocked) {
+                    setText(els.securityDesc, "Your saved entries are encrypted. Unlock to access them.");
+                    setText(els.securityPrimaryBtn, "Unlock");
+                    show(els.lockBtn, false);
+                } else {
+                    setText(els.securityDesc, "Encryption is enabled. You can change or remove the password.");
+                    setText(els.securityPrimaryBtn, "Change password");
+                    show(els.lockBtn, true);
+                }
+                return;
+            }
+
+            setText(els.securityDesc, "Optional: set a password to encrypt saved entries and require unlocking on reload.");
+            setText(els.securityPrimaryBtn, "Set password");
+            show(els.lockBtn, false);
+        }
+
+        function clearModalError() {
+            setText(els.modalError, "");
+            show(els.modalError, false);
+        }
+
+        function showModalError(msg) {
+            setText(els.modalError, msg);
+            show(els.modalError, true);
+        }
+
+        function hideAllModalBodies() {
+            modalBodies.forEach((id) => show(els[id], false));
+        }
+
+        function setModalDanger(on) {
+            els.modalActionBtn.classList.toggle("bg-indigo-600", !on);
+            els.modalActionBtn.classList.toggle("hover:bg-indigo-500", !on);
+            els.modalActionBtn.classList.toggle("active:bg-indigo-700", !on);
+
+            els.modalActionBtn.classList.toggle("bg-rose-600", on);
+            els.modalActionBtn.classList.toggle("hover:bg-rose-500", on);
+            els.modalActionBtn.classList.toggle("active:bg-rose-700", on);
+        }
+
+        function openModal(kind) {
+            modalState.kind = kind;
+            modalState.step = 1;
+            modalState.temp = {};
+            clearModalError();
+            hideAllModalBodies();
+            setModalDanger(kind === "reset");
+
+            ["modalUnlockPassword", "modalSetPassword1", "modalSetPassword2", "modalExistingPassword", "modalNewPassword1", "modalNewPassword2"]
+                .forEach((k) => els[k].value = "");
+
+            if (kind === "unlock") {
+                setText(els.modalTitle, "Unlock");
+                setText(els.modalSubtitle, "Enter your password to decrypt and load your saved entries.");
+                setText(els.modalActionBtn, "Unlock");
+                show(els.modalUnlock, true);
+            }
+
+            if (kind === "set") {
+                setText(els.modalTitle, "Set password");
+                setText(els.modalSubtitle, "Type a password. You will confirm it next.");
+                setText(els.modalActionBtn, "Next");
+                show(els.modalSetPasswordStep1, true);
+            }
+
+            if (kind === "change") {
+                setText(els.modalTitle, "Change password");
+                setText(els.modalSubtitle, "Enter your current password.");
+                setText(els.modalActionBtn, "Next");
+                show(els.modalChangePasswordStep1, true);
+            }
+
+            if (kind === "reset") {
+                setText(els.modalTitle, "Reset");
+                setText(els.modalSubtitle, "This cannot be undone.");
+                setText(els.modalActionBtn, "Reset");
+                show(els.modalResetConfirm, true);
+            }
+
+            show(els.modalRoot, true);
+            document.body.classList.add("overflow-hidden");
+
+            requestAnimationFrame(() => {
+                if (kind === "unlock") els.modalUnlockPassword.focus();
+                if (kind === "set") els.modalSetPassword1.focus();
+                if (kind === "change") els.modalExistingPassword.focus();
+            });
+        }
+
+        function closeModal() {
+            show(els.modalRoot, false);
+            document.body.classList.remove("overflow-hidden");
+            modalState.kind = null;
+            modalState.step = 1;
+            modalState.temp = {};
+            clearModalError();
+        }
+
+        async function handleModalAction() {
+            clearModalError();
+
+            if (modalState.kind === "unlock") {
+                const pwd = els.modalUnlockPassword.value || "";
+                if (!pwd) return showModalError("Enter your password.");
+
+                try {
+                    await validateCurrentPassword(pwd);
+                    await persistEntries();
+                    closeModal();
+                    updateSecurityBarUI();
+                    setLockedUI(false);
+                    setEmptyState();
+                    renderList();
+                    updatePreview(true);
+                    toast("Unlocked");
+                } catch (err) {
+                    showModalError(err?.message || "Unlock failed.");
+                }
+                return;
+            }
+
+            if (modalState.kind === "set") {
+                if (modalState.step === 1) {
+                    const p1 = els.modalSetPassword1.value || "";
+                    if (!p1) return showModalError("Enter a password.");
+
+                    modalState.temp.p1 = p1;
+                    modalState.step = 2;
+
+                    hideAllModalBodies();
+                    show(els.modalSetPasswordStep2, true);
+                    setText(els.modalSubtitle, "Type it again to confirm.");
+                    setText(els.modalActionBtn, "Enable");
+                    return requestAnimationFrame(() => els.modalSetPassword2.focus());
+                }
+
+                const p1 = modalState.temp.p1 || "";
+                const p2 = els.modalSetPassword2.value || "";
+                if (!p2) return showModalError("Confirm your password.");
+                if (p1 !== p2) return showModalError("Passwords do not match.");
+
+                try {
+                    await enableEncryption(p1);
+                    closeModal();
+                    updateSecurityBarUI();
+                    setLockedUI(false);
+                    setEmptyState();
+                    renderList();
+                    updatePreview(true);
+                    toast("Encryption enabled");
+                } catch (err) {
+                    showModalError(err?.message || "Failed to enable encryption.");
+                }
+                return;
+            }
+
+            if (modalState.kind === "change") {
+                if (modalState.step === 1) {
+                    const oldPwd = els.modalExistingPassword.value || "";
+                    if (!oldPwd) return showModalError("Enter your current password.");
+
+                    try {
+                        await validateCurrentPassword(oldPwd);
+                    } catch (err) {
+                        return showModalError(err?.message || "Incorrect password.");
+                    }
+
+                    modalState.step = 2;
+
+                    hideAllModalBodies();
+                    show(els.modalChangePasswordStep2, true);
+                    setText(els.modalSubtitle, "Enter a new password. Leave empty to remove encryption.");
+                    return requestAnimationFrame(() => els.modalNewPassword1.focus());
+                }
+
+                if (modalState.step === 2) {
+                    const newPwd = els.modalNewPassword1.value || "";
+                    modalState.temp.newPwd = newPwd;
+
+                    if (!newPwd) {
+                        try {
+                            await updatePassword("");
+                            closeModal();
+                            updateSecurityBarUI();
+                            setLockedUI(false);
+                            setEmptyState();
+                            renderList();
+                            updatePreview(true);
+                        } catch (err) {
+                            showModalError(err?.message || "Password update failed.");
+                        }
+                        return;
+                    }
+
+                    modalState.step = 3;
+                    hideAllModalBodies();
+                    show(els.modalChangePasswordStep3, true);
+                    setText(els.modalSubtitle, "Confirm your new password.");
+                    setText(els.modalActionBtn, "Update");
+                    return requestAnimationFrame(() => els.modalNewPassword2.focus());
+                }
+
+                const newPwd = modalState.temp.newPwd || "";
+                const confirmPwd = els.modalNewPassword2.value || "";
+
+                if (!confirmPwd) return showModalError("Confirm your new password.");
+                if (newPwd !== confirmPwd) return showModalError("New passwords do not match.");
+
+                try {
+                    await updatePassword(newPwd);
+                    closeModal();
+                    updateSecurityBarUI();
+                    setLockedUI(false);
+                    setEmptyState();
+                    renderList();
+                    updatePreview(true);
+                } catch (err) {
+                    showModalError(err?.message || "Password update failed.");
+                }
+                return;
+            }
+
+            if (modalState.kind === "reset") {
+                [STORAGE.plain, STORAGE.enc, STORAGE.meta].forEach((k) => localStorage.removeItem(k));
+
+                vault.mode = "plain";
+                vault.unlocked = true;
+                vault.key = null;
+                vault.salt = null;
+                vault.iterations = 0;
+
+                entries = [];
+                closeModal();
+                setLockedUI(false);
+                updateSecurityBarUI();
+                setEmptyState();
+                renderList();
+                updatePreview(true);
+                toast("Reset complete");
+            }
+        }
+
+        async function copyText(text) {
+            await navigator.clipboard.writeText(text);
+        }
+
+        function entryView() {
+            return [...entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+        }
+
+        function updateAllCountdowns() {
+            const countdown = `${remainingInPeriod(30)}s`;
+            els.list.querySelectorAll("[data-role='countdown']").forEach((n) => n.textContent = countdown);
+        }
+
+        async function refreshAllCodes() {
+            if (!vault.unlocked) return;
+
+            const items = [...els.list.querySelectorAll("li[data-id]")];
+            if (!items.length) return;
+
+            const byId = new Map(entries.map(e => [e.id, e]));
+            const tasks = items.map(async (li) => {
+                const entry = byId.get(li.dataset.id);
+                const codeEl = li.querySelector("[data-role='code']");
+                if (!entry || !codeEl) return;
+
+                try {
+                    codeEl.textContent = await generateTotp(entry.secret, 30, 6);
+                } catch {
+                    codeEl.textContent = "------";
+                }
+            });
+
+            await Promise.allSettled(tasks);
+        }
+
+        function renderList() {
+            if (!vault.unlocked) return els.list.innerHTML = "";
+
+            setEmptyState();
+            if (!entries.length) return els.list.innerHTML = "";
+
+            setText(els.countBadge, String(entries.length));
+
+            els.list.innerHTML = entryView().map((e) => `
+        <li class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-sm" data-id="${e.id}" draggable="true">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div class="min-w-0">
+              <div class="flex items-center gap-3">
+                <div class="select-none text-slate-400 text-lg leading-none cursor-grab" data-action="drag" title="Drag to reorder">≡</div>
+                <input data-action="rename" value="${escapeHtml(e.name || "")}"
+                  class="min-w-0 w-full md:w-[320px] rounded-xl bg-slate-950/40 border border-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Name" />
+              </div>
+
+              <div class="mt-2">
+                <span class="inline-flex items-center gap-2 text-xs">
+                  <span class="text-slate-400 cursor-pointer select-none" data-action="reveal">Reveal secret</span>
+                  <span class="text-slate-300 font-mono select-text hidden" data-role="secret"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-end">
+              <div class="bg-slate-950/60 border border-slate-800 rounded-2xl px-4 py-3 min-w-[220px]">
+                <div class="flex items-center justify-between gap-4">
+                  <div class="font-mono text-3xl tracking-wider cursor-pointer select-none hover:text-white" data-action="copy" data-role="code" title="Click to copy">------</div>
+                  <div class="font-mono text-xl text-slate-200" data-role="countdown">--s</div>
+                </div>
+              </div>
+
+              <div class="flex gap-2">
+                <button data-action="remove"
+                  class="rounded-xl px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-800 hover:bg-slate-700 active:bg-slate-900">
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </li>
+      `).join("");
+
+            updateAllCountdowns();
+            refreshAllCodes();
+        }
+
+        async function updatePreview(forceCode = false) {
+            const clean = normalizeBase32(els.secretInput.value);
+            const sec = Math.floor(Date.now() / 1000);
+            const windowId = Math.floor(sec / 30);
+            const r = remainingInPeriod(30);
+
+            setText(els.previewCountdown, `${r}s`);
+
+            if (!clean) {
+                setText(els.previewCode, "------");
+                show(els.previewError, false);
+                els.saveBtn.disabled = true;
+                return;
+            }
+
+            const shouldUpdateCode = forceCode || (windowId !== lastWindow);
+            els.saveBtn.disabled = !vault.unlocked;
+
+            if (!shouldUpdateCode) return;
+
+            try {
+                setText(els.previewCode, await generateTotp(clean, 30, 6));
+                show(els.previewError, false);
+            } catch (err) {
+                setText(els.previewCode, "------");
+                setText(els.previewError, err?.message || "Invalid secret.");
+                show(els.previewError, true);
+                els.saveBtn.disabled = true;
+            }
+        }
+
+        function clearInputs() {
+            els.secretInput.value = "";
+            els.nameInput.value = "";
+            show(els.previewError, false);
+            els.saveBtn.disabled = true;
+            updatePreview(true);
+            els.secretInput.focus();
+        }
+
+        function addEntryToTop(entry) {
+            entries.forEach(e => e.order = (e.order ?? 0) + 1);
+            entry.order = 0;
+            entries.push(entry);
+            entries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        }
+
+        async function saveEntry() {
+            if (!vault.unlocked) return;
+
+            const secret = normalizeBase32(els.secretInput.value);
+            if (!secret) return;
+
+            addEntryToTop({
+                id: crypto.randomUUID(),
+                name: (els.nameInput.value || "").trim() || "Unnamed",
+                secret,
+                createdAt: Date.now(),
+                order: 0
+            });
+
+            els.secretInput.value = "";
+            els.nameInput.value = "";
+            updatePreview(true);
+
+            try {
+                await persistEntries();
+                renderList();
+                toast("Saved");
+            } catch {
+                toast("Save failed");
+            }
+        }
+
+        function buildExportPayload() {
+            const payload = { version: 2, exportedAt: new Date().toISOString() };
+
+            if (vault.mode === "encrypted") {
+                const meta = getJson(STORAGE.meta);
+                const blob = getJson(STORAGE.enc);
+                if (!meta || !blob) throw new Error("Encrypted data missing.");
+                return { ...payload, encrypted: true, meta, blob };
+            }
+
+            return { ...payload, encrypted: false, entries: entryView().map(e => ({ ...e })) };
+        }
+
+        function exportJson() {
+            try {
+                const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "totp-export.json";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                URL.revokeObjectURL(url);
+                toast("Exported");
+            } catch (err) {
+                toast("Export failed");
+                alert(err?.message || "Export failed");
+            }
+        }
+
+        function parseImport(payload) {
+            if (!payload) throw new Error("Empty JSON.");
+            if (Array.isArray(payload)) return { kind: "plain", entries: payload };
+
+            if (typeof payload === "object") {
+                if (payload.encrypted === true && payload.meta && payload.blob) return { kind: "encrypted", payload };
+                if (Array.isArray(payload.entries)) return { kind: "plain", entries: payload.entries };
+            }
+
+            throw new Error("JSON format not recognized.");
+        }
+
+        async function importPlainEntries(arr) {
+            entries = normalizeEntriesArray(arr);
+            entries.forEach((e, i) => e.order = i);
+
+            if (vault.mode === "encrypted") {
+                if (!vault.unlocked) throw new Error("Unlock required before importing into encrypted vault.");
+                await persistEntries();
+            } else {
+                savePlainEntries();
+            }
+
+            renderList();
+            toast("Imported");
+        }
+
+        async function importEncryptedPayload(payload) {
+            const meta = payload.meta;
+            const blob = payload.blob;
+
+            if (!meta || !meta.protected || !meta.iter || !meta.salt) throw new Error("Encrypted meta is invalid.");
+            if (!blob || !blob.ct || !blob.iv) throw new Error("Encrypted blob is invalid.");
+
+            localStorage.removeItem(STORAGE.plain);
+            setJson(STORAGE.meta, meta);
+            setJson(STORAGE.enc, { v: 2, alg: "AES-GCM", iv: blob.iv, ct: blob.ct });
+
+            vault.mode = "encrypted";
+            vault.unlocked = false;
+            vault.key = null;
+            vault.salt = null;
+            vault.iterations = Number(meta.iter) || 310000;
+
+            entries = [];
+            updateSecurityBarUI();
+            setLockedUI(true);
+            toast("Imported (encrypted)");
+        }
+
+        async function importFromFile(file) {
+            const parsed = parseImport(JSON.parse(await file.text()));
+            if (parsed.kind === "encrypted") return importEncryptedPayload(parsed.payload);
+            return importPlainEntries(parsed.entries);
+        }
+
+        function lockNow() {
+            if (vault.mode !== "encrypted") return;
+
+            vault.unlocked = false;
+            vault.key = null;
+            vault.salt = null;
+            entries = [];
+
+            updateSecurityBarUI();
+            setLockedUI(true);
+            updatePreview(true);
+            toast("Locked");
+            openModal("unlock");
+        }
+
+        function initVaultAndLoad() {
+            if (hasEncryptedData()) {
+                vault.mode = "encrypted";
+                vault.unlocked = false;
+                entries = [];
+                updateSecurityBarUI();
+                setLockedUI(true);
+                return;
+            }
+
+            vault.mode = "plain";
+            vault.unlocked = true;
+            entries = loadPlainEntries();
+            entries.forEach((e, i) => e.order = i);
+            savePlainEntries();
+
+            updateSecurityBarUI();
+            setLockedUI(false);
+            setEmptyState();
+            renderList();
+        }
+
+        function reorderByDrag(fromId, toId) {
+            const view = entryView();
+            const fromIndex = view.findIndex(x => x.id === fromId);
+            const toIndex = view.findIndex(x => x.id === toId);
+            if (fromIndex < 0 || toIndex < 0) return;
+
+            const moved = view.splice(fromIndex, 1)[0];
+            view.splice(toIndex, 0, moved);
+
+            const byId = new Map(entries.map(e => [e.id, e]));
+            view.forEach((e, i) => byId.get(e.id).order = i);
+
+            persistEntries()
+                .then(() => { renderList(); toast("Reordered"); })
+                .catch(() => toast("Save failed"));
+        }
+
+        function tick() {
+            const sec = Math.floor(Date.now() / 1000);
+            if (sec === lastSecond) return;
+
+            lastSecond = sec;
+            const windowId = Math.floor(sec / 30);
+
+            setText(els.previewCountdown, `${remainingInPeriod(30)}s`);
+            updateAllCountdowns();
+
+            if (windowId !== lastWindow) {
+                lastWindow = windowId;
+                updatePreview(true);
+                refreshAllCodes();
+            }
+        }
+
+        function startTimers() {
+            clearInterval(previewTimer);
+            previewTimer = setInterval(tick, 250);
+            tick();
+        }
+
+        function wireUpEvents() {
+            els.secretInput.addEventListener("input", () => updatePreview(true));
+            els.nameInput.addEventListener("input", () => {
+                els.saveBtn.disabled = !normalizeBase32(els.secretInput.value) || !vault.unlocked;
+            });
+
+            els.saveBtn.addEventListener("click", saveEntry);
+            els.clearBtn.addEventListener("click", clearInputs);
+
+            [els.secretInput, els.nameInput].forEach((el) => el.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") saveEntry();
+            }));
+
+            els.previewCode.addEventListener("click", async () => {
+                const val = els.previewCode.textContent.trim();
+                if (!/^\d{6}$/.test(val)) return;
+                try { await copyText(val); toast("Copied"); } catch { toast("Copy failed"); }
+            });
+
+            els.exportBtn.addEventListener("click", exportJson);
+
+            els.importBtn.addEventListener("click", () => {
+                els.importFile.value = "";
+                els.importFile.click();
+            });
+
+            els.importFile.addEventListener("change", async () => {
+                const file = els.importFile.files?.[0];
+                if (!file) return;
+                try {
+                    await importFromFile(file);
+                } catch (err) {
+                    toast("Import failed");
+                    alert(err?.message || "Import failed");
+                }
+            });
+
+            els.securityPrimaryBtn.addEventListener("click", () => {
+                if (vault.mode === "encrypted") openModal(vault.unlocked ? "change" : "unlock");
+                else openModal("set");
+            });
+
+            els.lockBtn.addEventListener("click", lockNow);
+            els.lockedUnlockBtn.addEventListener("click", () => openModal("unlock"));
+            els.resetBtn.addEventListener("click", () => openModal("reset"));
+
+            [els.modalBackdrop, els.modalCloseBtn, els.modalCancelBtn].forEach((el) => el.addEventListener("click", closeModal));
+            els.modalActionBtn.addEventListener("click", handleModalAction);
+
+            window.addEventListener("keydown", (e) => {
+                if (els.modalRoot.classList.contains("hidden")) return;
+                if (e.key === "Escape") closeModal();
+                if (e.key === "Enter") handleModalAction();
+            });
+
+            els.list.addEventListener("click", async (e) => {
+                const target = e.target.closest("[data-action]");
+                if (!target) return;
+
+                const li = target.closest("li[data-id]");
+                const id = li?.dataset?.id;
+                const entry = id ? entries.find(x => x.id === id) : null;
+                const action = target.dataset.action;
+
+                if (action === "remove" && entry) {
+                    entries = entries.filter(x => x.id !== entry.id);
+                    entryView().forEach((x, i) => (entries.find(e => e.id === x.id).order = i));
+                    try { await persistEntries(); renderList(); toast("Removed"); } catch { toast("Save failed"); }
+                    return;
+                }
+
+                if (action === "reveal" && entry) {
+                    const secretEl = li.querySelector("[data-role='secret']");
+                    if (secretEl) {
+                        secretEl.textContent = normalizeBase32(entry.secret);
+                        show(target, false);
+                        show(secretEl, true);
+                    }
+                    return;
+                }
+
+                if (action === "copy") {
+                    const code = target.textContent.trim();
+                    if (!/^\d{6}$/.test(code)) return;
+                    try { await copyText(code); toast("Copied"); } catch { toast("Copy failed"); }
+                }
+            });
+
+            els.list.addEventListener("change", async (e) => {
+                const target = e.target.closest("[data-action='rename']");
+                if (!target) return;
+
+                const li = target.closest("li[data-id]");
+                const id = li?.dataset?.id;
+                const entry = id ? entries.find(x => x.id === id) : null;
+                if (!entry) return;
+
+                entry.name = target.value.trim() || "Unnamed";
+                try { await persistEntries(); toast("Renamed"); } catch { toast("Save failed"); }
+            });
+
+            let dragFromId = "";
+            els.list.addEventListener("dragstart", (e) => {
+                const li = e.target.closest("li[data-id]");
+                if (!li) return;
+                dragFromId = li.dataset.id || "";
+                li.classList.add("opacity-60");
+                e.dataTransfer.setData("text/plain", dragFromId);
+                e.dataTransfer.effectAllowed = "move";
+            });
+
+            els.list.addEventListener("dragend", (e) => {
+                const li = e.target.closest("li[data-id]");
+                if (li) li.classList.remove("opacity-60");
+            });
+
+            els.list.addEventListener("dragover", (e) => {
+                if (!dragFromId) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+            });
+
+            els.list.addEventListener("drop", (e) => {
+                e.preventDefault();
+                const li = e.target.closest("li[data-id]");
+                if (!li) return;
+
+                const toId = li.dataset.id;
+                const fromId = e.dataTransfer.getData("text/plain") || dragFromId;
+
+                dragFromId = "";
+                if (!fromId || !toId || fromId === toId) return;
+                reorderByDrag(fromId, toId);
+            });
+        }
+
+        function init() {
+            initVaultAndLoad();
+            wireUpEvents();
+            startTimers();
+            updatePreview(true);
+
+            if (vault.mode === "encrypted" && !vault.unlocked) openModal("unlock");
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
